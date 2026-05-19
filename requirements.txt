@@ -1,0 +1,8 @@
+# Dependencias do app web (servidor Flask). Usado pela imagem Docker.
+flask>=3.0
+requests>=2.31
+waitress>=3.0
+python-dotenv>=1.0
+
+# O utilitario consultar_status.py (gera Excel, roda fora do Docker) tambem
+# precisa de:  pandas>=2.0  e  openpyxl>=3.1  — instale-os a parte se for usa-lo.

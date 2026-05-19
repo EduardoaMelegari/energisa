@@ -1,0 +1,25 @@
+# Mantem segredos, dados e arquivos irrelevantes fora da imagem.
+.env
+.env.example
+.secret_key
+data/
+cookie.txt
+cookie.txt.tmp
+snapshot.json
+snapshot.json.bak
+snapshot.json.tmp
+snapshot.json.corrompido*
+
+.git
+.gitignore
+__pycache__/
+*.pyc
+
+# Itens que nao fazem parte do app web
+*.xlsx
+consultar_status.py
+executar.bat
+_probe.py
+DEPLOY.md
+Dockerfile
+docker-compose.yml

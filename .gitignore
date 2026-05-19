@@ -1,0 +1,20 @@
+# Segredos e dados — NUNCA versionar
+.env
+.secret_key
+data/
+cookie.txt
+cookie.txt.tmp
+snapshot.json
+snapshot.json.bak
+snapshot.json.tmp
+snapshot.json.corrompido*
+
+# Python
+__pycache__/
+*.pyc
+
+# Planilhas (dados de trabalho — entrada/saida do consultar_status.py)
+*.xlsx
+
+# Sondas/temporarios
+_probe.py

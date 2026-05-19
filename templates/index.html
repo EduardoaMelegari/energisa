@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Energisa - Projetos Eletricos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Projetos Eletricos &mdash; Energisa</h1>
+      <div class="meta">
+        <span id="last-update">Carregando&hellip;</span>
+        <span id="stats"></span>
+        <span id="sessao-status"></span>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btn-atualizar">Atualizar</button>
+      <a class="btn-sair" href="{{ url_for('logout') }}">Sair</a>
+    </div>
+  </header>
+
+  <details id="config-section">
+    <summary>Configuracao &mdash; cookie de sessao</summary>
+    <div class="config-body">
+      <p>
+        Quando o cookie expirar, o servidor vai retornar erro de autenticacao.
+        Para atualizar: abra o portal logado, F12 &rarr; Network &rarr; clique em
+        <code>GetListaProjetoEletrico</code> &rarr; Request Headers &rarr; copie o
+        header <code>Cookie:</code> inteiro e cole abaixo.
+      </p>
+      <textarea id="cookie-input" rows="6" spellcheck="false"
+                placeholder="_abck=...; .ASPXAUTH=...; UserInfo=...; ..."></textarea>
+      <div class="config-actions">
+        <button id="btn-cookie">Salvar cookie</button>
+        <span id="cookie-status"></span>
+      </div>
+    </div>
+  </details>
+
+  <div class="legenda">
+    <span class="badge novo">Novo (protocolado recentemente)</span>
+    <span class="badge alterado">Status mudou</span>
+    <span class="legenda-nota">Novos e alterados ficam fixados no topo ate voce clicar em &ldquo;marcar como visto&rdquo;.</span>
+  </div>
+
+  <div class="filtros">
+    <input id="filtro-busca" placeholder="Filtrar por proprietario, ID, rua, status&hellip;">
+    <label class="filtro-label" for="filtro-status">
+      Status:
+      <select id="filtro-status">
+        <option value="">Todos os status</option>
+      </select>
+    </label>
+    <label class="filtro-label" for="filtro-tipo">
+      Destaques:
+      <select id="filtro-tipo">
+        <option value="">Todos</option>
+        <option value="novo">Somente novos</option>
+        <option value="alterado">Somente alterados</option>
+        <option value="destaque">Novos + alterados</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="mensagem"></div>
+
+  <div id="progresso" class="progresso" hidden>
+    <div class="progresso-info">
+      <span id="progresso-texto">Atualizando observacoes&hellip;</span>
+      <span id="progresso-contador"></span>
+    </div>
+    <div class="progresso-trilha">
+      <div id="progresso-barra" class="progresso-barra"></div>
+    </div>
+  </div>
+
+  <div class="tabela-wrap">
+    <table id="tabela-projetos">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data</th>
+          <th>NUM_PE</th>
+          <th>Proprietario</th>
+          <th>Tipo</th>
+          <th>Logradouro</th>
+          <th>Status</th>
+          <th>Observacao</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="modal-docs" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-docs-titulo">
+      <div class="modal-cabecalho">
+        <h2 id="modal-docs-titulo">Documentos emitidos</h2>
+        <button id="modal-docs-fechar" class="modal-fechar" type="button"
+                aria-label="Fechar">&times;</button>
+      </div>
+      <p id="modal-docs-sub" class="modal-sub"></p>
+      <div id="modal-docs-corpo" class="modal-corpo"></div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    image: energisa-projetos
+    container_name: energisa-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DATA_DIR=/data
+    volumes:
+      # cookie.txt, snapshot.json e .secret_key persistem aqui (fora da imagem).
+      - ./data:/data
+    # Sem 'ports:' de proposito — o app NAO fica exposto na maquina.
+    # So o cloudflared (na mesma rede do compose) o alcanca, via http://app:1289.
+    expose:
+      - "1289"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: energisa-tunnel
+    restart: unless-stopped
+    # O token vem do .env. O mapeamento hostname publico -> http://app:1289
+    # e feito no painel do Cloudflare Zero Trust.
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      - app
