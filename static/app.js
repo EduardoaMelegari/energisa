@@ -13,13 +13,26 @@ const progressoBarra = document.getElementById("progresso-barra");
 const filtroBusca = document.getElementById("filtro-busca");
 const filtroTipo = document.getElementById("filtro-tipo");
 const filtroStatus = document.getElementById("filtro-status");
+const filtroVistoria = document.getElementById("filtro-vistoria");
 const tbody = document.querySelector("#tabela-projetos tbody");
 const modalDocs = document.getElementById("modal-docs");
 const modalDocsTitulo = document.getElementById("modal-docs-titulo");
 const modalDocsSub = document.getElementById("modal-docs-sub");
 const modalDocsCorpo = document.getElementById("modal-docs-corpo");
 const modalDocsFechar = document.getElementById("modal-docs-fechar");
+const modalVistoria = document.getElementById("modal-vistoria");
+const modalVistoriaTitulo = document.getElementById("modal-vistoria-titulo");
+const modalVistoriaSub = document.getElementById("modal-vistoria-sub");
+const modalVistoriaFechar = document.getElementById("modal-vistoria-fechar");
+const formVistoria = document.getElementById("form-vistoria");
+const vistoriaArquivo = document.getElementById("vistoria-arquivo");
+const vistoriaStatus = document.getElementById("vistoria-status");
+const vistoriaEnviar = document.getElementById("vistoria-enviar");
+const vistoriaCancelar = document.getElementById("vistoria-cancelar");
 const sessaoStatus = document.getElementById("sessao-status");
+
+// Projeto selecionado quando o modal de vistoria esta aberto.
+let vistoriaProjetoAtual = null;
 
 let projetos = [];
 
@@ -28,12 +41,22 @@ btnCookie.addEventListener("click", salvarCookie);
 filtroBusca.addEventListener("input", renderizarTabela);
 filtroTipo.addEventListener("change", renderizarTabela);
 filtroStatus.addEventListener("change", renderizarTabela);
+filtroVistoria.addEventListener("change", renderizarTabela);
 modalDocsFechar.addEventListener("click", fecharModalDocumentos);
 modalDocs.addEventListener("click", (e) => {
   if (e.target === modalDocs) fecharModalDocumentos();
 });
+modalVistoriaFechar.addEventListener("click", fecharModalVistoria);
+vistoriaCancelar.addEventListener("click", fecharModalVistoria);
+modalVistoria.addEventListener("click", (e) => {
+  if (e.target === modalVistoria) fecharModalVistoria();
+});
+formVistoria.addEventListener("submit", enviarVistoria);
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !modalDocs.hidden) fecharModalDocumentos();
+  if (e.key === "Escape") {
+    if (!modalVistoria.hidden) fecharModalVistoria();
+    else if (!modalDocs.hidden) fecharModalDocumentos();
+  }
 });
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -226,6 +249,7 @@ function renderizarTabela() {
   const filtro = filtroBusca.value.trim().toLowerCase();
   const tipo = filtroTipo.value;
   const statusSelecionado = filtroStatus.value;
+  const vistoriaSelecionada = filtroVistoria.value;
 
   tbody.innerHTML = "";
   let i = 0;
@@ -234,6 +258,8 @@ function renderizarTabela() {
     if (tipo === "alterado" && p.diff !== "alterado") continue;
     if (tipo === "destaque" && !p.diff) continue;
     if (statusSelecionado && p.Status !== statusSelecionado) continue;
+    if (vistoriaSelecionada === "pendente" && p.vistoria_solicitada) continue;
+    if (vistoriaSelecionada === "solicitada" && !p.vistoria_solicitada) continue;
 
     if (filtro) {
       const haystack = [
@@ -293,6 +319,11 @@ function renderizarTabela() {
     }
     tr.appendChild(tdStatus);
 
+    const tdVist = document.createElement("td");
+    tdVist.className = "vistoria-cell";
+    pintarVistoria(tdVist, p);
+    tr.appendChild(tdVist);
+
     const tdObs = document.createElement("td");
     tdObs.className = "obs-cell";
     pintarObservacao(tdObs, p);
@@ -304,12 +335,81 @@ function renderizarTabela() {
   if (i === 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 8;
+    td.colSpan = 9;
     td.className = "empty";
     td.textContent = "Nenhum projeto encontrado com os filtros aplicados.";
     tr.appendChild(td);
     tbody.appendChild(tr);
   }
+}
+
+function pintarVistoria(td, p) {
+  td.textContent = "";
+  td.classList.remove(
+    "vistoria-cell-solicitada", "vistoria-cell-pendente", "vistoria-cell-bloqueada"
+  );
+  if (p.vistoria_solicitada) {
+    td.classList.add("vistoria-cell-solicitada");
+    const label = document.createElement("div");
+    label.className = "vistoria-status-label";
+    label.textContent = "Vistoria solicitada";
+    td.appendChild(label);
+
+    if (p.vistoria_data) {
+      const sub = document.createElement("div");
+      sub.className = "vistoria-status-sub";
+      sub.textContent = "em " + formatarDataCurta(p.vistoria_data);
+      td.appendChild(sub);
+    } else if (p.vistoria_origem === "externo") {
+      const sub = document.createElement("div");
+      sub.className = "vistoria-status-sub";
+      sub.textContent = "(detectada pelo portal)";
+      td.appendChild(sub);
+    }
+
+    if (p.vistoria_arquivo) {
+      const arq = document.createElement("div");
+      arq.className = "vistoria-status-arquivo";
+      arq.title = p.vistoria_arquivo;
+      arq.textContent = p.vistoria_arquivo;
+      td.appendChild(arq);
+    }
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-vistoria-disabled";
+    btn.disabled = true;
+    btn.textContent = "Solicitada";
+    td.appendChild(btn);
+  } else if (p.vistoria_disponivel) {
+    td.classList.add("vistoria-cell-pendente");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-vistoria";
+    btn.textContent = "Solicitar vistoria";
+    btn.title = "Anexar documentação e solicitar vistoria deste projeto";
+    btn.addEventListener("click", () => abrirModalVistoria(p.NUM_PE));
+    td.appendChild(btn);
+  } else {
+    // Status nao permite vistoria ainda — mostra botao cinza com explicacao.
+    td.classList.add("vistoria-cell-bloqueada");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-vistoria-disabled";
+    btn.disabled = true;
+    btn.textContent = "Solicitar vistoria";
+    btn.title = "Vistoria só pode ser solicitada quando o status for "
+      + "'Projeto Aprovado' (status atual: " + (p.Status || "?") + ")";
+    td.appendChild(btn);
+  }
+}
+
+function formatarDataCurta(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("pt-BR") + " " +
+    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function pintarObservacao(td, p) {
@@ -399,7 +499,31 @@ function aplicarRespostaObservacao(p, data) {
     p.status_anterior = data.status_anterior || null;
     mudou = true;
   }
+  // /api/observacao tambem devolve o estado de vistoria detectado no detalhe.
+  // Atualiza o projeto local pra refletir vistoria solicitada externamente.
+  if (typeof data.vistoria_solicitada === "boolean") {
+    const antesSol = !!p.vistoria_solicitada;
+    const antesDisp = !!p.vistoria_disponivel;
+    p.vistoria_solicitada = data.vistoria_solicitada;
+    p.vistoria_disponivel = !!data.vistoria_disponivel;
+    p.vistoria_data = data.vistoria_data || "";
+    p.vistoria_arquivo = data.vistoria_arquivo || "";
+    p.vistoria_origem = data.vistoria_origem || "";
+    if (antesSol !== p.vistoria_solicitada || antesDisp !== p.vistoria_disponivel) {
+      atualizarCelulaVistoria(p.NUM_PE);
+    }
+  }
   return mudou;
+}
+
+function atualizarCelulaVistoria(numPe) {
+  const tr = tbody.querySelector(`tr[data-numpe="${cssEscape(numPe)}"]`);
+  if (!tr) return;
+  const td = tr.querySelector("td.vistoria-cell");
+  if (!td) return;
+  const p = projetos.find(x => x.NUM_PE === numPe);
+  if (!p) return;
+  pintarVistoria(td, p);
 }
 
 function reordenarERenderizar() {
@@ -651,4 +775,107 @@ async function salvarCookie() {
   } finally {
     btnCookie.disabled = false;
   }
+}
+
+// ---- Modal de solicitar vistoria -------------------------------------------
+
+function abrirModalVistoria(numPe) {
+  const p = projetos.find(x => x.NUM_PE === numPe);
+  if (!p) return;
+  if (p.vistoria_solicitada) {
+    // Defesa caso o botao tenha sido clicado antes do estado atualizar.
+    return;
+  }
+  vistoriaProjetoAtual = p;
+  modalVistoriaTitulo.textContent = "Solicitar vistoria - projeto " + p.NUM_PE;
+  modalVistoriaSub.textContent =
+    [p.Proprietario, p.Logradouro].filter(Boolean).join(" - ");
+  vistoriaArquivo.value = "";
+  vistoriaStatus.textContent = "";
+  vistoriaStatus.className = "vistoria-status";
+  vistoriaEnviar.disabled = false;
+  vistoriaEnviar.textContent = "Enviar solicitação";
+  vistoriaCancelar.disabled = false;
+  modalVistoria.hidden = false;
+  setTimeout(() => vistoriaArquivo.focus(), 50);
+}
+
+function fecharModalVistoria() {
+  if (vistoriaEnviar.disabled) return; // envio em andamento — nao deixa fechar
+  modalVistoria.hidden = true;
+  vistoriaProjetoAtual = null;
+  vistoriaArquivo.value = "";
+  vistoriaStatus.textContent = "";
+  vistoriaStatus.className = "vistoria-status";
+}
+
+async function enviarVistoria(e) {
+  e.preventDefault();
+  const p = vistoriaProjetoAtual;
+  if (!p) return;
+  const file = vistoriaArquivo.files && vistoriaArquivo.files[0];
+  if (!file) {
+    vistoriaStatus.textContent = "Selecione um arquivo .zip ou .rar.";
+    vistoriaStatus.className = "vistoria-status vistoria-erro";
+    return;
+  }
+  const nome = file.name.toLowerCase();
+  if (!(nome.endsWith(".zip") || nome.endsWith(".rar"))) {
+    vistoriaStatus.textContent = "Apenas .zip ou .rar.";
+    vistoriaStatus.className = "vistoria-status vistoria-erro";
+    return;
+  }
+
+  vistoriaEnviar.disabled = true;
+  vistoriaCancelar.disabled = true;
+  vistoriaEnviar.textContent = "Enviando...";
+  vistoriaStatus.textContent = "Enviando arquivo (" + formatarTamanho(file.size) + ")...";
+  vistoriaStatus.className = "vistoria-status vistoria-info";
+
+  const form = new FormData();
+  form.append("NUM_PE", p.NUM_PE);
+  form.append("CodEmp", p.CodEmp);
+  form.append("arquivo", file);
+
+  try {
+    const r = await fetch("/api/vistoria/solicitar", { method: "POST", body: form });
+    if (tratar401(r)) return;
+    const data = await r.json();
+    if (!r.ok) {
+      vistoriaStatus.textContent = data.erro || ("Erro HTTP " + r.status);
+      vistoriaStatus.className = "vistoria-status vistoria-erro";
+      vistoriaEnviar.disabled = false;
+      vistoriaCancelar.disabled = false;
+      vistoriaEnviar.textContent = "Tentar novamente";
+      return;
+    }
+    // Sucesso: atualiza o projeto local, atualiza a linha e fecha o modal.
+    p.vistoria_solicitada = true;
+    p.vistoria_data = data.timestamp || new Date().toISOString();
+    p.vistoria_arquivo = data.arquivo || file.name;
+    p.vistoria_origem = "app";
+    atualizarCelulaVistoria(p.NUM_PE);
+
+    vistoriaStatus.textContent = data.aviso
+      ? "Vistoria solicitada (com aviso: " + data.aviso + ")"
+      : "Vistoria solicitada com sucesso.";
+    vistoriaStatus.className = "vistoria-status vistoria-ok";
+    setTimeout(() => {
+      vistoriaEnviar.disabled = false;
+      vistoriaCancelar.disabled = false;
+      fecharModalVistoria();
+    }, 1200);
+  } catch (err) {
+    vistoriaStatus.textContent = "Erro de conexão: " + err.message;
+    vistoriaStatus.className = "vistoria-status vistoria-erro";
+    vistoriaEnviar.disabled = false;
+    vistoriaCancelar.disabled = false;
+    vistoriaEnviar.textContent = "Tentar novamente";
+  }
+}
+
+function formatarTamanho(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }

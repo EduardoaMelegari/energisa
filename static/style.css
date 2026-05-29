@@ -179,6 +179,8 @@ details#config-section summary {
 }
 .badge.novo { background: #d1e7dd; color: #0f5132; }
 .badge.alterado { background: #fff3cd; color: #664d03; }
+.badge.vistoria-pendente { background: #e7f1ff; color: #0a4d91; border: 1px solid #b6d4fe; }
+.badge.vistoria-feita { background: #e9ecef; color: #495057; border: 1px solid #cfd4d9; }
 .legenda-nota { color: #5b6b7d; align-self: center; }
 
 .filtros {
@@ -482,3 +484,115 @@ a.doc-abrir {
 a.doc-abrir:hover { background: #0b5ed7; }
 .modal-vazio, .modal-loading { color: #6c757d; font-style: italic; font-size: 0.88rem; }
 .modal-erro { color: #b02a37; font-size: 0.88rem; }
+
+/* ---- Coluna de vistoria na tabela ---- */
+td.vistoria-cell {
+  min-width: 160px;
+  max-width: 220px;
+  font-size: 0.82rem;
+  vertical-align: top;
+}
+td.vistoria-cell-solicitada { color: #5b6b7d; }
+.vistoria-status-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.82rem;
+}
+.vistoria-status-sub {
+  font-size: 0.72rem;
+  color: #6c757d;
+  margin-top: 2px;
+}
+.vistoria-status-arquivo {
+  font-size: 0.7rem;
+  color: #6c757d;
+  font-family: "Consolas", "Monaco", monospace;
+  word-break: break-all;
+  margin-top: 2px;
+  max-height: 2.4em;
+  overflow: hidden;
+}
+button.btn-vistoria {
+  background: #0d6efd;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 2px;
+}
+button.btn-vistoria:hover { background: #0b5ed7; }
+button.btn-vistoria-disabled {
+  background: #e9ecef;
+  color: #6c757d;
+  border: 1px solid #cfd4d9;
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: not-allowed;
+  margin-top: 6px;
+  opacity: 1;
+}
+
+/* ---- Modal de solicitar vistoria ---- */
+.vistoria-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.vistoria-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #495057;
+}
+#vistoria-arquivo {
+  padding: 0.4rem;
+  border: 1px solid #cbd2d9;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: white;
+}
+.vistoria-dica {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #5b6b7d;
+  line-height: 1.4;
+}
+.vistoria-status {
+  font-size: 0.85rem;
+  min-height: 1.2em;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+.vistoria-status:empty { display: none; }
+.vistoria-status.vistoria-info {
+  background: #cfe2ff;
+  color: #084298;
+  border-left: 3px solid #0d6efd;
+}
+.vistoria-status.vistoria-ok {
+  background: #d1e7dd;
+  color: #0f5132;
+  border-left: 3px solid #146c43;
+}
+.vistoria-status.vistoria-erro {
+  background: #f8d7da;
+  color: #842029;
+  border-left: 3px solid #dc3545;
+}
+.vistoria-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+button.btn-secundario {
+  background: #e9ecef;
+  color: #495057;
+  font-size: 0.88rem;
+  padding: 0.5rem 1rem;
+}
+button.btn-secundario:hover:not(:disabled) { background: #dde1e5; }

@@ -16,6 +16,7 @@ Endpoints:
   POST /api/marcar_visto  -> tira um projeto da lista de destaques
   POST /api/documentos    -> lista os documentos emitidos de um projeto
   GET  /api/documento     -> exibe/baixa um documento emitido (proxy autenticado)
+  POST /api/vistoria/solicitar -> upload do .zip + chamada SolicitarVistoria
   GET  /api/sessao        -> estado do keep-alive da sessao
 
 Snapshot dos projetos fica em snapshot.json, usado para detectar:
@@ -59,7 +60,23 @@ CPF = "5736193108"
 URL_API = "https://projetoseletricos.energisa.com.br/ProjetoEletrico/GetListaProjetoEletrico"
 URL_DETALHE = "https://projetoseletricos.energisa.com.br/AcompanharPE/GetAcompanhamento"
 URL_DOCUMENTOS = "https://projetoseletricos.energisa.com.br/AcompanharPE/GetDocumentosEmitidos"
+URL_UPLOAD = "https://projetoseletricos.energisa.com.br/projetoEletrico/UploadFilePE"
+URL_VISTORIA = "https://projetoseletricos.energisa.com.br/AcompanharPE/SolicitarVistoria"
 URL_PORTAL = "https://projetoseletricos.energisa.com.br"
+
+# Extensoes aceitas para o anexo da vistoria. O portal espera um arquivo unico
+# (geralmente .zip com toda a documentacao). Se precisar mandar mais coisa,
+# zipe tudo junto.
+VISTORIA_EXTENSOES = {".zip", ".rar"}
+VISTORIA_TAMANHO_MAX = 90 * 1024 * 1024  # 90 MB — abaixo do limite global do Flask
+
+# Status do projeto em que o portal habilita o botao "Solicitar Vistoria".
+# Se um dia o portal liberar pra outros status, basta adicionar aqui.
+STATUS_VISTORIA_OK = {"Projeto Aprovado"}
+
+
+def _status_libera_vistoria(status: str) -> bool:
+    return (status or "").strip() in STATUS_VISTORIA_OK
 
 # Pasta de anexos do portal. O proxy /api/documento so serve arquivos abaixo
 # deste prefixo — assim o endpoint nao vira um proxy aberto para qualquer URL.
@@ -83,6 +100,10 @@ DATA_DIR = Path(os.environ.get("DATA_DIR") or SCRIPT_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 COOKIE_FILE = DATA_DIR / "cookie.txt"
 SNAPSHOT_FILE = DATA_DIR / "snapshot.json"
+# Pasta onde guardamos uma copia local dos arquivos enviados em cada solicitacao
+# de vistoria — fica como registro caso o portal perca o arquivo.
+ANEXOS_DIR = DATA_DIR / "vistorias_anexos"
+ANEXOS_DIR.mkdir(parents=True, exist_ok=True)
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -130,7 +151,10 @@ app.config.update(
     # apenas para testar local em http://).
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "true").lower() != "false",
     PERMANENT_SESSION_LIFETIME=timedelta(days=7),
-    MAX_CONTENT_LENGTH=1 * 1024 * 1024,  # limite de 1 MB no corpo da requisicao
+    # 100 MB — JSONs da interface sao pequenos; o limite alto e para acomodar
+    # o upload do .zip da vistoria. A validacao especifica do tamanho da vistoria
+    # acontece em /api/vistoria/solicitar (VISTORIA_TAMANHO_MAX).
+    MAX_CONTENT_LENGTH=100 * 1024 * 1024,
 )
 
 # Limite de tentativas de login por IP — protecao simples contra forca bruta.
@@ -270,6 +294,33 @@ def portal_get(url, *, params=None, headers=None, stream=False, timeout=60):
     return r
 
 
+def portal_post(url, *, data=None, files=None, headers=None, timeout=120):
+    """POST autenticado no portal — usado pelo upload da vistoria.
+    Mesmo contrato de portal_get (injeta cookie, absorve renovacoes)."""
+    h = {"User-Agent": USER_AGENT}
+    if headers:
+        h.update(headers)
+    with _cookie_lock:
+        h["Cookie"] = cookie_header()
+        r = requests.post(url, data=data, files=files, headers=h, timeout=timeout)
+        _absorver_cookies(r)
+    return r
+
+
+def _nome_anexo_seguro(nome: str) -> str:
+    """Remove caracteres problematicos de path/URL de um nome de arquivo.
+    Usado tanto pra salvar a copia local quanto pra enviar ao portal."""
+    nome = (nome or "anexo").strip().replace("\\", "/").split("/")[-1]
+    seguros = []
+    for c in nome:
+        if c.isalnum() or c in "._-+ ()":
+            seguros.append(c)
+        else:
+            seguros.append("_")
+    saida = "".join(seguros).strip() or "anexo"
+    return saida[:200]  # corta se vier algo absurdamente longo
+
+
 SNAPSHOT_TMP = SNAPSHOT_FILE.with_name(SNAPSHOT_FILE.name + ".tmp")
 SNAPSHOT_BAK = SNAPSHOT_FILE.with_name(SNAPSHOT_FILE.name + ".bak")
 
@@ -280,20 +331,27 @@ def _normalizar_snapshot(data: dict) -> dict:
         "observacoes": data.get("observacoes", {}) or {},
         "datas": data.get("datas", {}) or {},
         "destaques": data.get("destaques", {}) or {},
+        "vistorias": data.get("vistorias", {}) or {},
+        "vistoria_checks": data.get("vistoria_checks", {}) or {},
     }
 
 
 def carregar_snapshot() -> dict:
-    """Retorna {'projects', 'observacoes', 'datas', 'destaques'} (todos dicts por num_pe).
+    """Retorna {'projects', 'observacoes', 'datas', 'destaques', 'vistorias'}
+    (todos dicts por num_pe).
 
     'destaques' guarda os projetos novos/alterados que ainda nao foram marcados
     como vistos pelo usuario — eles permanecem no topo entre as atualizacoes.
+
+    'vistorias' guarda registro local das vistorias ja solicitadas
+    (timestamp, nome do arquivo, origem). Permite mostrar o estado mesmo sem
+    rebuscar o detalhe a cada atualizacao.
 
     Se snapshot.json estiver ilegivel, tenta o backup (snapshot.json.bak) antes
     de desistir, e preserva o arquivo ruim como .corrompido. Assim um arquivo
     corrompido nunca e sobrescrito silenciosamente com dados vazios.
     """
-    vazio = {"projects": {}, "observacoes": {}, "datas": {}, "destaques": {}}
+    vazio = {"projects": {}, "observacoes": {}, "datas": {}, "destaques": {}, "vistorias": {}, "vistoria_checks": {}}
     if not SNAPSHOT_FILE.exists():
         return dict(vazio)
     try:
@@ -332,6 +390,8 @@ def salvar_snapshot(
     observacoes: dict,
     datas: dict | None = None,
     destaques: dict | None = None,
+    vistorias: dict | None = None,
+    vistoria_checks: dict | None = None,
 ) -> None:
     by_id = {str(p.get("NUM_PE", "")).strip(): p for p in projetos if p.get("NUM_PE")}
     payload = {
@@ -340,6 +400,8 @@ def salvar_snapshot(
         "observacoes": observacoes,
         "datas": datas or {},
         "destaques": destaques or {},
+        "vistorias": vistorias or {},
+        "vistoria_checks": vistoria_checks or {},
     }
     texto = json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -589,6 +651,8 @@ def atualizar():
     observacoes_cache = dict(snapshot["observacoes"])
     datas_cache = dict(snapshot["datas"])
     destaques_cache = dict(snapshot["destaques"])
+    vistorias_cache = dict(snapshot["vistorias"])
+    vistoria_checks_cache = dict(snapshot["vistoria_checks"])
     primeira_vez = len(snapshot_anterior) == 0
 
     # Salvaguarda: a API retornar 0 projetos quase sempre significa cookie
@@ -621,6 +685,9 @@ def atualizar():
                     }
                 # Status mudou desde a ultima atualizacao -> rebuscar observacao.
                 observacoes_cache.pop(pid, None)
+                # E descarta a checagem de vistoria — se voltar pra "Projeto
+                # Aprovado", o detalhe precisa ser refetchado pra verificar.
+                vistoria_checks_cache.pop(pid, None)
 
         destaque = destaques_cache.get(pid)
         diff = destaque["tipo"] if destaque else ""
@@ -637,6 +704,22 @@ def atualizar():
             or status_atual.strip() in STATUS_ACOMPANHAR
         )
 
+        vistoria = vistorias_cache.get(pid) or {}
+        vistoria_solicitada = bool(vistoria)
+        # O portal so habilita o botao quando o status esta na lista permitida
+        # E quando ainda nao foi solicitada — replicamos a mesma regra aqui pra
+        # nao expor um botao que daria erro ao clicar.
+        vistoria_disponivel = (
+            _status_libera_vistoria(status_atual) and not vistoria_solicitada
+        )
+        # Projetos em status que libera vistoria rebuscam observacao UMA vez —
+        # so quando ainda nao foram checados (vistoria_checks). Assim detectamos
+        # vistorias solicitadas direto pelo portal da Energisa sem refazer 1800
+        # requests por update. Pra rechecar depois, o usuario clica "rebuscar"
+        # na coluna de observacao.
+        if vistoria_disponivel and pid not in vistoria_checks_cache:
+            precisa_buscar_obs = True
+
         resultado.append({
             "NUM_PE": pid,
             "CodEmp": p.get("COD_EMP_PE") or "",
@@ -651,14 +734,23 @@ def atualizar():
             "Observacao": obs_cached,
             "obs_fetched": obs_fetched,
             "precisa_buscar_obs": precisa_buscar_obs,
+            "vistoria_solicitada": vistoria_solicitada,
+            "vistoria_disponivel": vistoria_disponivel,
+            "vistoria_data": vistoria.get("timestamp", ""),
+            "vistoria_arquivo": vistoria.get("arquivo", ""),
+            "vistoria_origem": vistoria.get("origem", ""),
         })
 
     # Descarta destaques de projetos que sairam da lista da API.
     ids_atuais = {str(p.get("NUM_PE", "")).strip() for p in projetos_api}
     destaques_cache = {k: v for k, v in destaques_cache.items() if k in ids_atuais}
+    vistoria_checks_cache = {k: v for k, v in vistoria_checks_cache.items() if k in ids_atuais}
 
     try:
-        salvar_snapshot(projetos_api, observacoes_cache, datas_cache, destaques_cache)
+        salvar_snapshot(
+            projetos_api, observacoes_cache, datas_cache, destaques_cache,
+            vistorias_cache, vistoria_checks_cache,
+        )
     except RuntimeError as e:
         return jsonify({"erro": str(e)}), 500
 
@@ -696,6 +788,11 @@ def obter_observacao():
     observacao = (detalhe.get("DSC_OBSERVACAO_EXECUCAO") or "").strip()
     data_abertura = str(detalhe.get("DATA_ABERTURA") or "").strip()
     status_detalhe = extrair_status_detalhe(detalhe)
+    # No detalhe, DSC_SITUACAO_VISTORIA so vem preenchido quando alguem (a gente
+    # ou direto pelo portal) ja solicitou vistoria. Serve pra detectar vistorias
+    # solicitadas fora do nosso app.
+    situacao_vistoria = (detalhe.get("DSC_SITUACAO_VISTORIA") or "").strip()
+    ressalva_vistoria = (detalhe.get("DSC_RESSALVA_VISTORIA") or "").strip()
 
     snapshot = carregar_snapshot()
 
@@ -732,14 +829,55 @@ def obter_observacao():
     snapshot["observacoes"][num_pe] = observacao
     if data_abertura:
         snapshot["datas"][num_pe] = data_abertura
+
+    # Se o portal diz que ja existe vistoria e nao temos registro local, gravamos
+    # como solicitada externamente (origem="externo") — assim o botao da
+    # interface fica desabilitado mesmo sem termos enviado pelo app.
+    if situacao_vistoria and num_pe not in snapshot["vistorias"]:
+        snapshot["vistorias"][num_pe] = {
+            "timestamp": "",  # nao sabemos quando foi
+            "arquivo": "",
+            "filename_servidor": "",
+            "origem": "externo",
+            "situacao": situacao_vistoria,
+            "ressalva": ressalva_vistoria,
+        }
+
+    # Registra que ja checamos vistoria deste projeto. Evita o /api/atualizar
+    # rebuscar todo projeto "Projeto Aprovado" a cada update — ele so refaz
+    # quando o registro sai (status mudou, ou usuario clicou "rebuscar").
+    status_para_check = status_detalhe or (
+        (projeto.get("DSC_SITUACAO_PE") or "") if projeto else ""
+    )
+    if _status_libera_vistoria(status_para_check):
+        if situacao_vistoria:
+            # Detectou vistoria -> nao precisa mais checar.
+            snapshot["vistoria_checks"].pop(num_pe, None)
+        else:
+            snapshot["vistoria_checks"][num_pe] = datetime.now().isoformat(timespec="seconds")
+
     projetos_list = list(snapshot["projects"].values())
     try:
         salvar_snapshot(
-            projetos_list, snapshot["observacoes"], snapshot["datas"], snapshot["destaques"]
+            projetos_list,
+            snapshot["observacoes"],
+            snapshot["datas"],
+            snapshot["destaques"],
+            snapshot["vistorias"],
+            snapshot["vistoria_checks"],
         )
     except RuntimeError as e:
         return jsonify({"erro": str(e)}), 500
 
+    vistoria_atual = snapshot["vistorias"].get(num_pe) or {}
+    vistoria_solicitada = bool(vistoria_atual)
+    # Pra calcular vistoria_disponivel usamos o status mais recente — se o
+    # detalhe mostrou status diferente do salvo, usa esse novo; senao usa
+    # o status salvo do projeto.
+    status_para_check = status_detalhe or (projeto.get("DSC_SITUACAO_PE") or "" if projeto else "")
+    vistoria_disponivel = (
+        _status_libera_vistoria(status_para_check) and not vistoria_solicitada
+    )
     return jsonify({
         "observacao": observacao,
         "data": data_abertura,
@@ -748,6 +886,13 @@ def obter_observacao():
         "status_mudou": status_mudou,
         "status": status_detalhe if status_mudou else "",
         "status_anterior": status_anterior,
+        "vistoria_solicitada": vistoria_solicitada,
+        "vistoria_disponivel": vistoria_disponivel,
+        "vistoria_data": vistoria_atual.get("timestamp", ""),
+        "vistoria_arquivo": vistoria_atual.get("arquivo", ""),
+        "vistoria_origem": vistoria_atual.get("origem", ""),
+        "vistoria_situacao": situacao_vistoria,
+        "vistoria_ressalva": ressalva_vistoria,
     })
 
 
@@ -764,7 +909,12 @@ def marcar_visto():
     projetos_list = list(snapshot["projects"].values())
     try:
         salvar_snapshot(
-            projetos_list, snapshot["observacoes"], snapshot["datas"], snapshot["destaques"]
+            projetos_list,
+            snapshot["observacoes"],
+            snapshot["datas"],
+            snapshot["destaques"],
+            snapshot["vistorias"],
+            snapshot["vistoria_checks"],
         )
     except RuntimeError as e:
         return jsonify({"erro": str(e)}), 500
@@ -850,6 +1000,183 @@ def baixar_documento():
         f'inline; filename="{nome_ascii}"; filename*=UTF-8\'\'{quote(nome)}'
     )
     return resp
+
+
+@app.route("/api/vistoria/solicitar", methods=["POST"])
+def solicitar_vistoria():
+    """Solicita vistoria pra um projeto: faz upload do .zip pro portal e dispara
+    o SolicitarVistoria com o nome retornado.
+
+    Fluxo replica o que o portal faz na interface dele:
+      1. POST /projetoEletrico/UploadFilePE (multipart, campo files[])
+         -> resposta: [{"name": "<guid>+<arquivo>", "error": null, ...}]
+      2. GET /AcompanharPE/SolicitarVistoria?numpe=&idEmp=&filename=<name>
+         -> resposta: {"errorMsg": null} em caso de sucesso
+
+    Espera form-data com:
+      NUM_PE, CodEmp, arquivo (file, .zip ou .rar)
+    """
+    if not cookie_header():
+        return jsonify({"erro": "Cookie nao configurado."}), 400
+
+    num_pe = (request.form.get("NUM_PE") or "").strip()
+    cod_emp = (request.form.get("CodEmp") or "").strip()
+    upload = request.files.get("arquivo")
+
+    if not num_pe or not cod_emp:
+        return jsonify({"erro": "NUM_PE e CodEmp sao obrigatorios."}), 400
+    if not upload or not upload.filename:
+        return jsonify({"erro": "Anexe um arquivo .zip ou .rar com a documentacao."}), 400
+
+    ext = Path(upload.filename).suffix.lower()
+    if ext not in VISTORIA_EXTENSOES:
+        return jsonify({
+            "erro": f"Extensao {ext or '(sem extensao)'} nao aceita. Use .zip ou .rar.",
+        }), 400
+
+    # Bloqueia antes de gastar upload se o projeto nao esta em status que
+    # libera vistoria — evita ir e voltar do portal com erro.
+    snapshot_pre = carregar_snapshot()
+    projeto_atual = snapshot_pre["projects"].get(num_pe) or {}
+    status_projeto = (projeto_atual.get("DSC_SITUACAO_PE") or "").strip()
+    if status_projeto and not _status_libera_vistoria(status_projeto):
+        return jsonify({
+            "erro": f"Vistoria so pode ser solicitada quando o status e "
+                    f"'Projeto Aprovado'. Status atual: '{status_projeto}'.",
+        }), 400
+    if num_pe in snapshot_pre["vistorias"]:
+        return jsonify({"erro": "Vistoria ja foi solicitada para este projeto."}), 400
+
+    # Le tudo em memoria — precisamos dos bytes pra mandar pro portal e pra
+    # arquivar a copia local depois que der certo. Files de vistoria sao .zip
+    # com documentos, raramente passam de alguns MB.
+    conteudo = upload.read()
+    if len(conteudo) == 0:
+        return jsonify({"erro": "O arquivo enviado esta vazio."}), 400
+    if len(conteudo) > VISTORIA_TAMANHO_MAX:
+        mb = VISTORIA_TAMANHO_MAX // (1024 * 1024)
+        return jsonify({"erro": f"Arquivo maior que {mb} MB."}), 400
+
+    nome_seguro = _nome_anexo_seguro(upload.filename)
+    content_type = upload.mimetype or "application/zip"
+
+    # --- Etapa 1: upload do arquivo ----------------------------------------
+    headers_upload = {
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": URL_PORTAL,
+        "Referer": f"{URL_PORTAL}/AcompanharPE/Index?id={num_pe}&idEmp={cod_emp}",
+    }
+    # Campo "files[]" e o default do blueimp jQuery-File-Upload, que e o que
+    # o portal usa. A resposta vem como lista [{name, full_path, error, ...}].
+    files_param = {"files[]": (nome_seguro, conteudo, content_type)}
+    try:
+        r_up = portal_post(URL_UPLOAD, files=files_param, headers=headers_upload, timeout=300)
+    except requests.RequestException as e:
+        return jsonify({"erro": f"Falha de rede no upload: {e}"}), 502
+
+    if r_up.status_code != 200:
+        return jsonify({
+            "erro": f"HTTP {r_up.status_code} no upload do arquivo. "
+                    "Cookie pode ter expirado — atualize em Configuracao.",
+        }), 400
+
+    try:
+        upload_resp = r_up.json()
+    except json.JSONDecodeError:
+        return jsonify({
+            "erro": "Resposta do upload nao e JSON (provavelmente o cookie "
+                    "expirou e o portal redirecionou pra tela de login).",
+        }), 400
+
+    if not isinstance(upload_resp, list) or not upload_resp:
+        return jsonify({"erro": f"Resposta inesperada do upload: {upload_resp!r}"}), 400
+
+    item = upload_resp[0]
+    if not isinstance(item, dict):
+        return jsonify({"erro": "Item de upload em formato inesperado."}), 400
+    if item.get("error"):
+        return jsonify({"erro": f"Upload rejeitado pelo portal: {item['error']}"}), 400
+    filename_servidor = (item.get("name") or "").strip()
+    if not filename_servidor:
+        return jsonify({"erro": "Upload nao retornou o nome do arquivo no servidor."}), 400
+
+    # --- Etapa 2: efetivar a solicitacao -----------------------------------
+    headers_solicitar = {
+        "Accept": "*/*",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": f"{URL_PORTAL}/AcompanharPE/Index?id={num_pe}&idEmp={cod_emp}",
+    }
+    # requests encoda o '+' do filename como %2B automaticamente nos params,
+    # que e exatamente o que o portal espera (vimos na cURL do user).
+    params = {"numpe": num_pe, "idEmp": cod_emp, "filename": filename_servidor}
+    try:
+        r_sol = portal_get(URL_VISTORIA, params=params, headers=headers_solicitar, timeout=60)
+    except requests.RequestException as e:
+        return jsonify({"erro": f"Falha de rede ao solicitar vistoria: {e}"}), 502
+
+    if r_sol.status_code != 200:
+        return jsonify({
+            "erro": f"HTTP {r_sol.status_code} ao solicitar vistoria. "
+                    "Upload feito, mas a solicitacao final falhou.",
+        }), 400
+
+    try:
+        result = r_sol.json()
+    except json.JSONDecodeError:
+        return jsonify({
+            "erro": "Resposta de SolicitarVistoria nao e JSON. "
+                    "O upload foi feito, mas nao consigo confirmar o sucesso.",
+        }), 400
+
+    if isinstance(result, dict) and result.get("errorMsg"):
+        return jsonify({"erro": str(result["errorMsg"])}), 400
+
+    # --- Sucesso — arquiva copia local e marca no snapshot -----------------
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    pasta = ANEXOS_DIR / num_pe
+    try:
+        pasta.mkdir(parents=True, exist_ok=True)
+        carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
+        (pasta / f"{carimbo}_{nome_seguro}").write_bytes(conteudo)
+    except OSError as e:
+        # Vistoria ja foi solicitada — falha em arquivar copia local nao deve
+        # quebrar a resposta de sucesso, so loga.
+        print(f"[AVISO] vistoria {num_pe} solicitada, mas falhou ao arquivar "
+              f"copia local: {e}")
+
+    snapshot = carregar_snapshot()
+    snapshot["vistorias"][num_pe] = {
+        "timestamp": timestamp,
+        "arquivo": upload.filename,
+        "filename_servidor": filename_servidor,
+        "origem": "app",
+    }
+    snapshot["vistoria_checks"].pop(num_pe, None)
+    projetos_list = list(snapshot["projects"].values())
+    try:
+        salvar_snapshot(
+            projetos_list,
+            snapshot["observacoes"],
+            snapshot["datas"],
+            snapshot["destaques"],
+            snapshot["vistorias"],
+            snapshot["vistoria_checks"],
+        )
+    except RuntimeError as e:
+        return jsonify({
+            "ok": True,
+            "aviso": f"Vistoria solicitada, mas falhou ao salvar registro: {e}",
+            "timestamp": timestamp,
+            "arquivo": upload.filename,
+        })
+
+    return jsonify({
+        "ok": True,
+        "timestamp": timestamp,
+        "arquivo": upload.filename,
+        "filename_servidor": filename_servidor,
+    })
 
 
 @app.route("/api/sessao", methods=["GET"])

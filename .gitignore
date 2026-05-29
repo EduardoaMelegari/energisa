@@ -8,6 +8,7 @@ snapshot.json
 snapshot.json.bak
 snapshot.json.tmp
 snapshot.json.corrompido*
+vistorias_anexos/
 
 # Python
 __pycache__/

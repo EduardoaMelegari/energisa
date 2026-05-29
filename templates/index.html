@@ -43,6 +43,8 @@
   <div class="legenda">
     <span class="badge novo">Novo (protocolado recentemente)</span>
     <span class="badge alterado">Status mudou</span>
+    <span class="badge vistoria-pendente">Vistoria n&atilde;o solicitada</span>
+    <span class="badge vistoria-feita">Vistoria solicitada</span>
     <span class="legenda-nota">Novos e alterados ficam fixados no topo ate voce clicar em &ldquo;marcar como visto&rdquo;.</span>
   </div>
 
@@ -61,6 +63,14 @@
         <option value="novo">Somente novos</option>
         <option value="alterado">Somente alterados</option>
         <option value="destaque">Novos + alterados</option>
+      </select>
+    </label>
+    <label class="filtro-label" for="filtro-vistoria">
+      Vistoria:
+      <select id="filtro-vistoria">
+        <option value="">Todos</option>
+        <option value="pendente">Pendentes (n&atilde;o solicitada)</option>
+        <option value="solicitada">J&aacute; solicitada</option>
       </select>
     </label>
   </div>
@@ -88,6 +98,7 @@
           <th>Tipo</th>
           <th>Logradouro</th>
           <th>Status</th>
+          <th>Vistoria</th>
           <th>Observacao</th>
         </tr>
       </thead>
@@ -104,6 +115,35 @@
       </div>
       <p id="modal-docs-sub" class="modal-sub"></p>
       <div id="modal-docs-corpo" class="modal-corpo"></div>
+    </div>
+  </div>
+
+  <div id="modal-vistoria" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-vistoria-titulo">
+      <div class="modal-cabecalho">
+        <h2 id="modal-vistoria-titulo">Solicitar vistoria</h2>
+        <button id="modal-vistoria-fechar" class="modal-fechar" type="button"
+                aria-label="Fechar">&times;</button>
+      </div>
+      <p id="modal-vistoria-sub" class="modal-sub"></p>
+      <div class="modal-corpo">
+        <form id="form-vistoria" class="vistoria-form">
+          <label class="vistoria-label" for="vistoria-arquivo">
+            Anexo (.zip ou .rar) com a documenta&ccedil;&atilde;o:
+          </label>
+          <input id="vistoria-arquivo" type="file" accept=".zip,.rar" required>
+          <p class="vistoria-dica">
+            Zipe todos os documentos necess&aacute;rios em um &uacute;nico arquivo
+            antes de anexar. O envio replica o que o portal faz ao clicar em
+            <em>Solicitar Vistoria</em>.
+          </p>
+          <div id="vistoria-status" class="vistoria-status"></div>
+          <div class="vistoria-acoes">
+            <button type="button" id="vistoria-cancelar" class="btn-secundario">Cancelar</button>
+            <button type="submit" id="vistoria-enviar">Enviar solicita&ccedil;&atilde;o</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
