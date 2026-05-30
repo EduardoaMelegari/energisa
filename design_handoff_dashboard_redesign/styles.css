@@ -90,10 +90,6 @@
 
 * { box-sizing: border-box; }
 
-/* [hidden] precisa vencer regras com display: flex/grid (ex.: .overlay, .cards).
-   Sem isso os modais e a view de cards aparecem ja no load. */
-[hidden] { display: none !important; }
-
 html, body {
   margin: 0;
   padding: 0;
@@ -111,13 +107,13 @@ body {
 #root { min-height: 100vh; }
 
 .app {
-  max-width: min(1600px, calc(100vw - 32px));
+  max-width: 1320px;
   margin: 0 auto;
   padding: 22px 26px 80px;
 }
 
 @media (max-width: 640px) {
-  .app { padding: 14px 12px 90px; max-width: 100%; }
+  .app { padding: 14px 12px 90px; }
 }
 
 /* ---------- Top bar / chrome ---------------------------------------------- */
@@ -411,25 +407,21 @@ body {
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
-/* overflow-x auto preservado como fallback em telas muito estreitas, mas
-   ajustes de padding/wrap abaixo fazem a tabela caber sem rolagem nas
-   resolucoes usuais (>=1280px). */
 .table-scroll { overflow-x: auto; }
 table.grid {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  table-layout: auto;
+  font-size: 13.5px;
 }
 table.grid thead th {
   text-align: left;
-  padding: 11px 10px;
+  padding: 12px 14px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   font-weight: 700;
-  font-size: 11px;
+  font-size: 11.5px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-2);
   white-space: nowrap;
   position: sticky;
@@ -437,14 +429,10 @@ table.grid thead th {
   z-index: 2;
 }
 table.grid tbody td {
-  padding: 11px 10px;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
 }
-/* Quebra controlada: so nas celulas cujo conteudo realmente pode ser longo.
-   .owner/.addr/.obs ja tem overflow-wrap nos spans; quem precisa de quebra
-   forcada em td (porque nao tem span filho) e a obs-cell. */
-table.grid tbody td.obs-cell { overflow-wrap: anywhere; }
 table.grid tbody tr:last-child td { border-bottom: none; }
 table.grid tbody tr { transition: background 0.12s; }
 table.grid tbody tr.normal:hover { background: var(--surface-2); }
@@ -462,22 +450,22 @@ tr.row-chg:hover { background: var(--chg-bg-hover); }
 .cell-idx { color: var(--text-3); font-variant-numeric: tabular-nums; font-weight: 600; }
 .cell-data { color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.numpe { font-family: var(--mono); font-weight: 600; font-size: 12.5px; letter-spacing: -0.02em; }
+.numpe { font-family: var(--mono); font-weight: 600; font-size: 13px; letter-spacing: -0.02em; }
 .numpe-row { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
 
-.owner { font-weight: 700; color: var(--text); word-wrap: break-word; overflow-wrap: anywhere; }
+.owner { font-weight: 700; color: var(--text); }
 .tipo-tag {
   display: inline-block;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-2);
   background: var(--surface-3);
   border: 1px solid var(--border);
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
   white-space: nowrap;
 }
-.addr { color: var(--text-2); word-wrap: break-word; overflow-wrap: anywhere; }
+.addr { color: var(--text-2); max-width: 240px; }
 
 /* status cell */
 .status-wrap { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
@@ -542,7 +530,7 @@ tr.row-chg:hover { background: var(--chg-bg-hover); }
 .vist-done .vist-label { color: var(--text-2); }
 .vist-done .vist-label .vd { background: var(--text-3); }
 .vist-sub { font-size: 11px; color: var(--text-3); }
-.vist-file { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); word-break: break-all; max-width: 120px; }
+.vist-file { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); word-break: break-all; max-width: 150px; }
 .btn-vist {
   font-family: var(--font);
   font-weight: 700;
@@ -565,7 +553,7 @@ tr.row-chg:hover { background: var(--chg-bg-hover); }
 }
 
 /* obs cell */
-.obs { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+.obs { max-width: 320px; min-width: 200px; font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
 .obs-text { white-space: pre-wrap; word-break: break-word; max-height: 5.2em; overflow-y: auto; }
 .obs-loading { color: var(--text-3); font-style: italic; display: inline-flex; align-items: center; gap: 7px; }
 .obs-empty { color: var(--text-3); font-style: italic; }
@@ -734,115 +722,3 @@ tr.row-chg:hover { background: var(--chg-bg-hover); }
 /* footer note */
 .footnote { text-align: center; color: var(--text-3); font-size: 12px; margin-top: 26px; }
 .footnote b { color: var(--text-2); }
-
-/* ---------- Cookie config (necessario para atualizar .ASPXAUTH manualmente) */
-/* Nao faz parte do design oficial, mas e funcional: aparece como bloco
-   recolhivel acima da toolbar quando o usuario precisa colar um cookie novo. */
-.config-section {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 14px;
-  overflow: hidden;
-}
-.config-section > summary {
-  padding: 12px 16px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-2);
-  list-style: none;
-  user-select: none;
-}
-.config-section > summary::-webkit-details-marker { display: none; }
-.config-section > summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: 8px;
-  color: var(--text-3);
-  transition: transform 0.15s;
-}
-.config-section[open] > summary::before { transform: rotate(90deg); }
-.config-section[open] > summary { border-bottom: 1px solid var(--border); }
-.config-body { padding: 14px 16px 16px; }
-.config-body p { font-size: 12.5px; color: var(--text-2); margin: 0 0 10px; line-height: 1.5; }
-.config-body code {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  background: var(--surface-3);
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: var(--text);
-}
-.config-body textarea {
-  width: 100%;
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--text);
-  resize: vertical;
-  min-height: 100px;
-  outline: none;
-}
-.config-body textarea:focus {
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
-}
-.config-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
-#cookie-status { font-size: 12.5px; font-weight: 600; }
-#cookie-status.ok { color: var(--brand-ink); }
-#cookie-status.erro { color: var(--st-reprovado); }
-
-/* Mensagem global (avisos do /api/atualizar) */
-#mensagem:empty { display: none; }
-#mensagem { margin-bottom: 14px; }
-#mensagem .erro {
-  background: color-mix(in srgb, var(--st-reprovado) 12%, transparent);
-  color: var(--st-reprovado);
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-}
-#mensagem .info {
-  background: color-mix(in srgb, var(--st-analise) 12%, transparent);
-  color: var(--st-analise);
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Theme toggle button no topbar */
-.btn-icon {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  display: inline-grid;
-  place-items: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-.btn-icon:hover { background: var(--surface-2); color: var(--text); border-color: var(--text-3); }
-
-/* Botao Sair no topbar */
-.btn-sair {
-  font-family: var(--font);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-2);
-  text-decoration: none;
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
-.btn-sair:hover { background: var(--surface-2); color: var(--text); }
-

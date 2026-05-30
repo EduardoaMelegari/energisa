@@ -3,30 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Energisa - Projetos Eletricos</title>
+  <title>Energisa &mdash; Projetos El&eacute;tricos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Projetos Eletricos &mdash; Energisa</h1>
-      <div class="meta">
-        <span id="last-update">Carregando&hellip;</span>
-        <span id="stats"></span>
-        <span id="sessao-status"></span>
-      </div>
+<div class="app">
+
+  <!-- Top bar: marca + sessao + tema + atualizar + sair -->
+  <div class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
+          <path d="M13 2 4.5 13.5H11l-1 8.5L19.5 10H13z"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name">energisa</span>
+        <span class="brand-sub">Projetos El&eacute;tricos</span>
+      </span>
     </div>
-    <div class="actions">
-      <button id="btn-atualizar">Atualizar</button>
+    <div class="topbar-actions">
+      <span id="sessao-status" class="session">
+        <span class="dot"></span> Sess&atilde;o: verificando&hellip;
+      </span>
+      <button id="btn-tema" class="btn-icon" type="button" aria-label="Alternar tema" title="Alternar tema">
+        <svg id="ic-tema" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
+      <button id="btn-atualizar" class="btn btn-primary" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/>
+        </svg>
+        Atualizar
+      </button>
       <a class="btn-sair" href="{{ url_for('logout') }}">Sair</a>
     </div>
-  </header>
+  </div>
 
-  <details id="config-section">
-    <summary>Configuracao &mdash; cookie de sessao</summary>
+  <!-- Configuracao de cookie (recolhivel) -->
+  <details id="config-section" class="config-section">
+    <summary>Configura&ccedil;&atilde;o &mdash; cookie de sess&atilde;o</summary>
     <div class="config-body">
       <p>
-        Quando o cookie expirar, o servidor vai retornar erro de autenticacao.
+        Quando o cookie expirar, o servidor retorna erro de autentica&ccedil;&atilde;o.
         Para atualizar: abra o portal logado, F12 &rarr; Network &rarr; clique em
         <code>GetListaProjetoEletrico</code> &rarr; Request Headers &rarr; copie o
         header <code>Cookie:</code> inteiro e cole abaixo.
@@ -34,119 +61,202 @@
       <textarea id="cookie-input" rows="6" spellcheck="false"
                 placeholder="_abck=...; .ASPXAUTH=...; UserInfo=...; ..."></textarea>
       <div class="config-actions">
-        <button id="btn-cookie">Salvar cookie</button>
+        <button id="btn-cookie" class="btn btn-ghost" type="button">Salvar cookie</button>
         <span id="cookie-status"></span>
       </div>
     </div>
   </details>
 
-  <div class="legenda">
-    <span class="badge novo">Novo (protocolado recentemente)</span>
-    <span class="badge alterado">Status mudou</span>
-    <span class="badge vistoria-pendente">Vistoria n&atilde;o solicitada</span>
-    <span class="badge vistoria-feita">Vistoria solicitada</span>
-    <span class="legenda-nota">Novos e alterados ficam fixados no topo ate voce clicar em &ldquo;marcar como visto&rdquo;.</span>
+  <!-- Faixa de estatisticas (preenchida em JS no passo 3) -->
+  <div class="stats">
+    <div class="stat">
+      <div class="k">Projetos</div>
+      <div class="v" id="stat-total">&mdash;</div>
+    </div>
+    <div class="stat accent-new">
+      <span class="corner"></span>
+      <div class="k">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2 9.5 9.5 2 12l7.5 2.5L12 22l2.5-7.5L22 12l-7.5-2.5z"/>
+        </svg>
+        Novos
+      </div>
+      <div class="v" id="stat-novos">&mdash;</div>
+    </div>
+    <div class="stat accent-chg">
+      <span class="corner"></span>
+      <div class="k">Status mudou</div>
+      <div class="v" id="stat-alterados">&mdash;</div>
+    </div>
+    <div class="stat">
+      <div class="k">Vistorias a solicitar</div>
+      <div class="v" id="stat-vistorias">&mdash;</div>
+    </div>
   </div>
 
-  <div class="filtros">
-    <input id="filtro-busca" placeholder="Filtrar por proprietario, ID, rua, status&hellip;">
-    <label class="filtro-label" for="filtro-status">
-      Status:
+  <!-- Toolbar: busca + 3 filtros + limpar + toggle tabela/cards -->
+  <div class="toolbar">
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+      </svg>
+      <input id="filtro-busca" type="text"
+             placeholder="Filtrar por propriet&aacute;rio, NUM_PE, rua, status&hellip;">
+    </div>
+    <div class="select">
       <select id="filtro-status">
         <option value="">Todos os status</option>
       </select>
-    </label>
-    <label class="filtro-label" for="filtro-tipo">
-      Destaques:
+    </div>
+    <div class="select">
       <select id="filtro-tipo">
-        <option value="">Todos</option>
+        <option value="">Todos os destaques</option>
         <option value="novo">Somente novos</option>
         <option value="alterado">Somente alterados</option>
         <option value="destaque">Novos + alterados</option>
       </select>
-    </label>
-    <label class="filtro-label" for="filtro-vistoria">
-      Vistoria:
+    </div>
+    <div class="select">
       <select id="filtro-vistoria">
-        <option value="">Todos</option>
-        <option value="pendente">Pendentes (n&atilde;o solicitada)</option>
-        <option value="solicitada">J&aacute; solicitada</option>
+        <option value="">Vistoria: todas</option>
+        <option value="pendente">N&atilde;o solicitadas</option>
+        <option value="solicitada">J&aacute; solicitadas</option>
       </select>
-    </label>
+    </div>
+    <button id="btn-limpar-filtros" class="chip-clear" type="button" hidden>Limpar filtros</button>
+    <div class="seg" id="seg-layout" style="margin-left: auto;">
+      <button id="seg-tabela" class="on" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M3 15h18M9 3v18"/>
+        </svg>
+        Tabela
+      </button>
+      <button id="seg-cards" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        Cards
+      </button>
+    </div>
   </div>
 
+  <!-- Legenda -->
+  <div class="legend">
+    <span class="lg new"><i></i> Novo (protocolado recentemente)</span>
+    <span class="lg chg"><i></i> Status mudou</span>
+    <span class="lg vp"><i></i> Vistoria n&atilde;o solicitada</span>
+    <span class="lg vs"><i></i> Vistoria solicitada</span>
+    <span class="note">Novos e alterados ficam fixados no topo at&eacute; voc&ecirc; marcar como visto.</span>
+  </div>
+
+  <!-- Mensagens (erros do /api/atualizar) -->
   <div id="mensagem"></div>
 
-  <div id="progresso" class="progresso" hidden>
-    <div class="progresso-info">
-      <span id="progresso-texto">Atualizando observacoes&hellip;</span>
-      <span id="progresso-contador"></span>
+  <!-- Barra de progresso (visivel durante carga das observacoes) -->
+  <div id="progresso" class="progress" hidden>
+    <div class="progress-info">
+      <span id="progresso-texto" class="t">Atualizando observa&ccedil;&otilde;es&hellip;</span>
+      <span id="progresso-contador" class="c"></span>
     </div>
-    <div class="progresso-trilha">
-      <div id="progresso-barra" class="progresso-barra"></div>
+    <div class="progress-track">
+      <div id="progresso-barra" class="progress-bar"></div>
     </div>
   </div>
 
-  <div class="tabela-wrap">
-    <table id="tabela-projetos">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Data</th>
-          <th>NUM_PE</th>
-          <th>Proprietario</th>
-          <th>Tipo</th>
-          <th>Logradouro</th>
-          <th>Status</th>
-          <th>Vistoria</th>
-          <th>Observacao</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+  <!-- Conteudo: tabela (default) ou cards (toggle no passo 4) -->
+  <div id="view-tabela" class="table-wrap">
+    <div class="table-scroll">
+      <table id="tabela-projetos" class="grid">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Data</th>
+            <th>NUM_PE</th>
+            <th>Propriet&aacute;rio</th>
+            <th>Tipo</th>
+            <th>Logradouro</th>
+            <th>Status</th>
+            <th>Vistoria</th>
+            <th>Observa&ccedil;&atilde;o</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
-  <div id="modal-docs" class="modal-overlay" hidden>
+  <div id="view-cards" class="cards" hidden></div>
+
+  <!-- Rodape: ultima atualizacao -->
+  <div class="footnote">
+    <span id="last-update">Carregando&hellip;</span>
+  </div>
+
+  <!-- Modal: documentos emitidos -->
+  <div id="modal-docs" class="overlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-docs-titulo">
-      <div class="modal-cabecalho">
-        <h2 id="modal-docs-titulo">Documentos emitidos</h2>
-        <button id="modal-docs-fechar" class="modal-fechar" type="button"
-                aria-label="Fechar">&times;</button>
+      <div class="modal-head">
+        <div>
+          <h2 id="modal-docs-titulo">Documentos emitidos</h2>
+          <div id="modal-docs-sub" class="sub"></div>
+        </div>
+        <button id="modal-docs-fechar" class="modal-x" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-      <p id="modal-docs-sub" class="modal-sub"></p>
-      <div id="modal-docs-corpo" class="modal-corpo"></div>
+      <div id="modal-docs-corpo" class="modal-body"></div>
     </div>
   </div>
 
-  <div id="modal-vistoria" class="modal-overlay" hidden>
+  <!-- Modal: solicitar vistoria -->
+  <div id="modal-vistoria" class="overlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-vistoria-titulo">
-      <div class="modal-cabecalho">
-        <h2 id="modal-vistoria-titulo">Solicitar vistoria</h2>
-        <button id="modal-vistoria-fechar" class="modal-fechar" type="button"
-                aria-label="Fechar">&times;</button>
+      <div class="modal-head">
+        <div>
+          <h2 id="modal-vistoria-titulo">Solicitar vistoria</h2>
+          <div id="modal-vistoria-sub" class="sub"></div>
+        </div>
+        <button id="modal-vistoria-fechar" class="modal-x" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
       </div>
-      <p id="modal-vistoria-sub" class="modal-sub"></p>
-      <div class="modal-corpo">
-        <form id="form-vistoria" class="vistoria-form">
-          <label class="vistoria-label" for="vistoria-arquivo">
-            Anexo (.zip ou .rar) com a documenta&ccedil;&atilde;o:
-          </label>
-          <input id="vistoria-arquivo" type="file" accept=".zip,.rar" required>
-          <p class="vistoria-dica">
+      <div class="modal-body">
+        <form id="form-vistoria" class="vform">
+          <label class="lbl">Anexo (.zip ou .rar) com a documenta&ccedil;&atilde;o</label>
+          <input id="vistoria-arquivo" type="file" accept=".zip,.rar" hidden>
+          <div id="vistoria-dropzone" class="dropzone" tabindex="0" role="button"
+               aria-label="Arraste ou clique para selecionar o arquivo"></div>
+          <p class="vhint">
             Zipe todos os documentos necess&aacute;rios em um &uacute;nico arquivo
             antes de anexar. O envio replica o que o portal faz ao clicar em
             <em>Solicitar Vistoria</em>.
           </p>
-          <div id="vistoria-status" class="vistoria-status"></div>
-          <div class="vistoria-acoes">
-            <button type="button" id="vistoria-cancelar" class="btn-secundario">Cancelar</button>
-            <button type="submit" id="vistoria-enviar">Enviar solicita&ccedil;&atilde;o</button>
+          <div id="vistoria-status" class="vstatus" hidden></div>
+          <div class="vactions">
+            <button type="button" id="vistoria-cancelar" class="btn btn-ghost">Cancelar</button>
+            <button type="submit" id="vistoria-enviar" class="btn btn-primary">
+              Enviar solicita&ccedil;&atilde;o
+            </button>
           </div>
         </form>
       </div>
     </div>
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
